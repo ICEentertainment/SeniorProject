@@ -1,7 +1,6 @@
 ﻿using Windows.UI.Xaml.Media.Imaging;
-using System.Runtime.InteropServices.WindowsRuntime;
 using SharpDX.Mathematics.Interop;
-using SharpDX.Direct3D;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace Engine
 {
@@ -61,7 +60,17 @@ namespace Engine
             return (new RawVector2(x, y));
         }
 
-        /*We are on drawing the point now*/
+        /*We are drawing a single point with a specfic color*/
+        public void drawPoint(RawVector2 point)
+        {
+            if(point.X >= 0 && point.Y >= 0 && point.X < bmp.PixelWidth && point.Y < bmp.PixelHeight)
+        }
+        public void Render(Camera camera, params Mesh[] Meshes)
+        {
+            var viewMatrix = 
+        }
+
+
 
         public static RawVector3 TransformCoordinate(RawVector3 coordinate, RawMatrix transform)
         {
