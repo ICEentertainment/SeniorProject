@@ -1,5 +1,5 @@
 ﻿using Windows.UI.Xaml.Media.Imaging;
-using SharpDX.Mathematics.Interop;
+using SharpDX;
 using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace Engine
@@ -37,56 +37,56 @@ namespace Engine
             bmp.Invalidate();
         }
         //Color a specifc pixel
-        public void PutPixel(int x, int y, RawColor4 color)
+        public void PutPixel(int x, int y, Color4 color)
         {
             //Need to convert our 2D coordinates, X and Y to 1d for our back buffer
             var index = (x + y * bmp.PixelWidth) + 4;
 
-            backBuffer[index] = (byte)(color.B * 255);
-            backBuffer[index + 1] = (byte)(color.G * 255);
-            backBuffer[index + 2] = (byte)(color.R * 255);
-            backBuffer[index + 3] = (byte)(color.A * 255);
+            backBuffer[index] = (byte)(color.Blue* 255);
+            backBuffer[index + 1] = (byte)(color.Green * 255);
+            backBuffer[index + 2] = (byte)(color.Red * 255);
+            backBuffer[index + 3] = (byte)(color.Alpha * 255);
         }   
 
         //Pass in a 3D coordinate and it returns a 2D Vector
-        public RawVector2 Project(RawVector3 coord, RawMatrix transMat)
+        public Vector2 Project(Vector3 coord, Matrix transMat)
         {
             //Transform the coordinates
-            var point = TransformCoordinate(coord, transMat);
+            var point = Vector3.TransformCoordinate(coord, transMat);
             //Coordinates are now transformed according to the center of the screen.
             // Need to transform again to top left
             var x = point.X * bmp.PixelWidth + bmp.PixelWidth / 2.0f;
             var y = point.Y * bmp.PixelHeight + bmp.PixelHeight / 2.0f;
-            return (new RawVector2(x, y));
+            return (new Vector2(x, y));
         }
 
         /*We are drawing a single point with a specfic color*/
-        public void drawPoint(RawVector2 point)
+        public void drawPoint(Vector2 point)
         {
-            if(point.X >= 0 && point.Y >= 0 && point.X < bmp.PixelWidth && point.Y < bmp.PixelHeight)
+            if (point.X >= 0 && point.Y >= 0 && point.X < bmp.PixelWidth && point.Y < bmp.PixelHeight)
+            {
+                PutPixel((int)point.X, (int)point.Y, new Color4(1.0f, 1.0f, 0.0f, 1.0f));
+            }
         }
         public void Render(Camera camera, params Mesh[] Meshes)
         {
-            var viewMatrix = 
+            var viewMatrix = Matrix.LookAtLH(camera.Position, camera.Target, Vector3.UnitY);
+            var projectionMatrix = Matrix.PerspectiveFovRH(.78f, (float)bmp.PixelWidth / bmp.PixelHeight, 0.01f, 0.01f);
+
+            foreach(Mesh mesh in Meshes)
+            {
+                var worldMatrix = Matrix.RotationYawPitchRoll(mesh.Rotation.Y, mesh.Rotation.X, mesh.Rotation.Z);
+                var transformMatirx = worldMatrix * viewMatrix * projectionMatrix;
+
+                foreach (var vertex in mesh.Vertices)
+                {
+                    var point = Project(vertex, transformMatirx);
+                    drawPoint(point);
+                }
+            }
         }
 
 
-
-        public static RawVector3 TransformCoordinate(RawVector3 coordinate, RawMatrix transform)
-        {
-            RawVector3 result;
-            TransformCoordinate(ref coordinate, ref transform, out result);
-            return result;
-        }
-        public static void TransformCoordinate(ref RawVector3 coordinate, ref RawMatrix transform, out RawVector3 result)
-        {
-            RawVector4 vector = new RawVector4();
-            vector.X = (coordinate.X * transform.M11) + (coordinate.Y * transform.M21) + (coordinate.Z * transform.M31) + transform.M41;
-            vector.Y = (coordinate.X * transform.M12) + (coordinate.Y * transform.M22) + (coordinate.Z * transform.M32) + transform.M42;
-            vector.Z = (coordinate.X * transform.M13) + (coordinate.Y * transform.M23) + (coordinate.Z * transform.M33) + transform.M43;
-            vector.W = 1f / ((coordinate.X * transform.M14) + (coordinate.Y * transform.M24) + (coordinate.Z * transform.M34) + transform.M44);
-
-            result = new RawVector3(vector.X * vector.W, vector.Y * vector.W, vector.Z * vector.W);
-        }
+    
     }
 }

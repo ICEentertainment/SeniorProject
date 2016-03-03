@@ -1,9 +1,9 @@
-﻿using SharpDX.Mathematics.Interop;
+﻿using SharpDX;
 namespace Engine
 {
     class Camera
     {
-        public RawVector3 Position { get; set; }
-        public RawVector3 Target { get; set; }
+        public Vector3 Position { get; set; }
+        public Vector3 Target { get; set; }
     }
 }
