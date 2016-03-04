@@ -90,6 +90,32 @@ namespace SoftEngine
                 PutPixel((int)point.X, (int)point.Y, new Color4(1.0f, 1.0f, 0.0f, 1.0f));
             }
         }
+        public void DrawPoint2(Vector2 point)
+        {
+
+            if (point.X >= 0 && point.Y >= 0 && point.X < bmp.PixelWidth && point.Y < bmp.PixelHeight)
+            {
+
+                PutPixel((int)point.X, (int)point.Y, new Color4(1.0f, 0.0f, 0.0f, 1.0f));
+            }
+        }
+
+        public void DrawLine(Vector2 point1, Vector2 point2)
+        {
+            var dist = (point1 - point2).Length();
+            //Nothing to draw becuase they are next to eachother
+            if (dist < 2)
+            {
+                return;
+            }
+            //Using Bresenhan algorithm. Find the mid point, draw the mid point, and recursivly do this
+            // unit the length is less than two. 
+            Vector2 mid = point1 + (point2 - point1) / 2;
+            DrawPoint(mid);
+            DrawLine(mid, point2);
+            DrawLine(point1, mid);
+            
+        }
 
         /* This is where the real magic happens. This is the most important function in the whole device.
         */
@@ -114,14 +140,22 @@ namespace SoftEngine
                 var worldMatrix = Matrix.RotationYawPitchRoll(mesh.Rotation.Y, mesh.Rotation.X, mesh.Rotation.Z) * 
                                   Matrix.Translation(mesh.Position);
 
+                //THE WVP of the matrices. This makes one god matrix that we apply to every vertice
+                // That does all the transformations at once.
                 var transformMatrix = worldMatrix * viewMatrix * projectionMatrix;
 
                 foreach (var vertex in mesh.Vertices)
                 {
-                   
+
                     var point = Project(vertex, transformMatrix);
-                    
-                    DrawPoint(point);
+                    //Going to color the sides red just for fun
+                    DrawPoint2(point);
+                }
+                for (int i =0; i < mesh.Vertices.Length -1 ; i++)
+                {
+                    var point1 = Project(mesh.Vertices[i], transformMatrix);
+                    var point2 = Project(mesh.Vertices[i + 1], transformMatrix);
+                    DrawLine(point1, point2);
                 }
             }
         }
