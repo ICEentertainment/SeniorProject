@@ -1,6 +1,9 @@
 ﻿using Windows.UI.Xaml.Media.Imaging;
 using System.Runtime.InteropServices.WindowsRuntime;
 using SharpDX;
+using System;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace SoftEngine
 {
@@ -100,21 +103,101 @@ namespace SoftEngine
             }
         }
 
+        /* Using Bresenhams algorithm to draw the lines. 
+        */
         public void DrawLine(Vector2 point1, Vector2 point2)
         {
-            var dist = (point1 - point2).Length();
-            //Nothing to draw becuase they are next to eachother
-            if (dist < 2)
+            var x0 = (int)point1.X;
+            var y0 = (int)point1.Y;
+            var x1 = (int)point2.X;
+            var y1 = (int)point2.Y;
+
+            var dx = Math.Abs(x1 - x0);
+            var dy = Math.Abs(y1 - y0);
+            var sx = (x0 < x1) ? 1 : -1;
+            var sy = (y0 < y1) ? 1 : -1;
+
+            var err = dx - dy;
+
+            while (true)
             {
-                return;
+                DrawPoint(new Vector2(x0, y0));
+
+                if ((x0 == x1) && (y0 == y1)) break;
+                var err2 = 2 * err;
+                if (err2 > -dy) { err -= dy; x0 += sx; }
+                if (err2 < dx) { err += dx; y0 += sy; }    
             }
-            //Using Bresenhan algorithm. Find the mid point, draw the mid point, and recursivly do this
-            // unit the length is less than two. 
-            Vector2 mid = point1 + (point2 - point1) / 2;
-            DrawPoint(mid);
-            DrawLine(mid, point2);
-            DrawLine(point1, mid);
-            
+        }
+
+        /* I am using Blender as my 3D modeling software and am using a JSON exporter to output
+            my scenes into JSON format (created by David Catuhe). This function loads that file
+            and imports all the meshes in the scene into our array where we create a mesh object
+            for each and return an array of mesh objects.  
+        */
+        public async Task<Mesh[]> LoadJSONMesh(String meshName)
+        {
+            // loading the meshes from the file passed in.
+            var meshes = new List<Mesh>();
+            var file = await Windows.ApplicationModel.Package.Current.InstalledLocation.GetFileAsync(meshName);
+            var data = await Windows.Storage.FileIO.ReadTextAsync(file);
+            dynamic jsonObj = Newtonsoft.Json.JsonConvert.DeserializeObject(data);
+            //loop through all the meshes from our file and load their values
+            for (var Mindex = 0; Mindex < jsonObj.meshes.Count; Mindex++)
+            {
+                //Grab the vertices
+                var verticesArray = jsonObj.meshes[Mindex].vertices;
+                //Grab the faces
+                var faceArray = jsonObj.meshes[Mindex].indices;
+                //Grab the number of texture cooridnates per vertex
+                var uvCount = jsonObj.meshes[Mindex].uvCount.Value;
+
+                var step = 1;
+                //Jumping 6,8 and 10 depending on the uvCount
+                switch ((int)uvCount)
+                {
+                    case 0:
+                        step = 6;
+                        break;
+                    case 1:
+                        step = 8;
+                        break;
+                    case 2:
+                        step = 10;
+                        break;
+                }
+                var vertices = verticesArray.Count / step;
+                //Number of faces is the face array divided by 3, this is because our face array
+                //is filled with vertices that creates triangles. so divide by 3 tells us how many
+                //triangles we have
+                var faces = faceArray.Count / 3;
+                var mesh = new Mesh(jsonObj.meshes[Mindex].name.Value, vertices, faces);
+                //Now we fill our mesh object from the file
+                for (var index = 0; index < faces; index++)
+                {
+                    //Grabing each vertice that creates the face
+                    var a = (int)faceArray[index * 3].Value;
+                    var b = (int)faceArray[index * 3 + 1].Value;
+                    var c = (int)faceArray[index * 3 + 2].Value;
+                    mesh.Faces[index] = new Mesh.Face { A = a, B = b, C = c };
+                }
+                for (var index = 0; index < vertices; index++)
+                {
+                    //Grabbing each vertice that we care about
+                    var x = (float)verticesArray[index * step].Value;
+                    var y = (float)verticesArray[index * step + 1].Value;
+                    var z = (float)verticesArray[index * step + 2].Value;
+                    mesh.Vertices[index] = new Vector3(x, y, z);
+                }
+                //Position that was set in blender
+                var position = jsonObj.meshes[Mindex].position;
+                //Set our mesh to that postion
+                mesh.Position = new Vector3((float)position[0].Value, (float)position[1].Value, (float)position[2].Value);
+                //Add that mesh to our array of meshes
+                meshes.Add(mesh);
+
+            }
+            return meshes.ToArray();
         }
 
         /* This is where the real magic happens. This is the most important function in the whole device.
@@ -151,11 +234,28 @@ namespace SoftEngine
                     //Going to color the sides red just for fun
                     DrawPoint2(point);
                 }
-                for (int i =0; i < mesh.Vertices.Length -1 ; i++)
-                {
-                    var point1 = Project(mesh.Vertices[i], transformMatrix);
-                    var point2 = Project(mesh.Vertices[i + 1], transformMatrix);
-                    DrawLine(point1, point2);
+                //for (int i =0; i < mesh.Vertices.Length -1 ; i++)
+                //{
+                //    //var point1 = Project(mesh.Vertices[i], transformMatrix);
+                //    //var point2 = Project(mesh.Vertices[i + 1], transformMatrix);
+                //    //DrawLine(point1, point2);
+                    
+                //}
+                foreach(var face in mesh.Faces)
+                {   
+                    // Drawing each triangles face. Obviously a triangle is made of three points
+                    // Just grab the three and draw a line to each recursivly
+                    var vertexA = mesh.Vertices[face.A];
+                    var vertexB = mesh.Vertices[face.B];
+                    var vertexC = mesh.Vertices[face.C];
+
+                    var pixelA = Project(vertexA, transformMatrix);
+                    var pixelB = Project(vertexB, transformMatrix);
+                    var pixelC = Project(vertexC, transformMatrix);
+
+                    DrawLine(pixelA, pixelB);
+                    DrawLine(pixelB, pixelC);
+                    DrawLine(pixelC, pixelA);
                 }
             }
         }
