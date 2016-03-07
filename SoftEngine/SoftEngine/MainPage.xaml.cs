@@ -13,7 +13,6 @@ using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
-
 /*  Created By Joshua Brooks 
     Since this project is for learning there are massive ammounts of comments for each function.
     My process was to write the code then remind myself every aspect of what I wrote to double
@@ -31,7 +30,7 @@ namespace SoftEngine
         private Device device;
         Mesh[] meshes;
         Camera mera = new Camera();
-
+        DateTime previousDate;
         private async void Page_Loaded(object sender, RoutedEventArgs e)
         {
             // Choose the back buffer resolution here
@@ -41,24 +40,27 @@ namespace SoftEngine
             frontBuffer.Source = bmp;
 
             device = new Device(bmp);
-            meshes = await device.LoadJSONMesh("monkey.babylon");
-            mera.Position = new Vector3(0, 0, 10.0f);
+            meshes = await device.LoadJSONMesh("Test2.babylon");
+            mera.Position = new Vector3(0.0f, 0.0f, 13.0f);
             mera.Target = Vector3.Zero;
 
             // Registering to the XAML rendering loop
             CompositionTarget.Rendering += CompositionTarget_Rendering;
         }
 
-
+        DateTime prev;
+        TextBlock fps = new TextBlock();
         void CompositionTarget_Rendering(object sender, object e)
         {
+
             device.Clear(0, 0, 0, 255);
 
             foreach (var mesh in meshes)
             {
-                mesh.Rotation = new Vector3(mesh.Rotation.X + 0.01f, mesh.Rotation.Y + 0.01f, mesh.Rotation.Z);
+                mesh.Rotation = new Vector3(mesh.Rotation.X, mesh.Rotation.Y + .01f, mesh.Rotation.Z);
+                device.Render(mera, meshes);
             }
-            device.Render(mera, meshes);
+            
            
             device.Present();
         }

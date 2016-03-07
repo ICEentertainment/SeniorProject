@@ -11,7 +11,10 @@ namespace SoftEngine
     {
         //Creating a backbuffer object
         private byte[] backBuffer;
+        private readonly float[] depthBuffer;
         private WriteableBitmap bmp;
+        private readonly int renderWidth;
+        private readonly int renderHeight;
 
         /*  This constructor takes in a bmp image with a declared size, our screen size,
             and inits our backbuffer with the amount of pixels to draw on the screen, wich 
@@ -20,14 +23,19 @@ namespace SoftEngine
         public Device(WriteableBitmap bmp)
         {
             this.bmp = bmp;
-         
+            renderHeight = bmp.PixelHeight;
+            renderWidth = bmp.PixelWidth;
+            //4times our resolution becuae each pixel has 4 properties
             backBuffer = new byte[bmp.PixelWidth * bmp.PixelHeight * 4];
+            //We only want one property per pixel, the z, so dont have to multiply it
+            depthBuffer = new float[bmp.PixelWidth * bmp.PixelHeight];
         }
 
         /*  The Clear function does exactly what It says. It fills our back buffer with a certain color 
             this allows for an image to be swapped with a blank screen.
         */
         public void Clear(byte r, byte g, byte b, byte a) {
+            //clear the backbuffer
             for (var index = 0; index < backBuffer.Length; index += 4)
             {
                 
@@ -35,6 +43,11 @@ namespace SoftEngine
                 backBuffer[index + 1] = g;
                 backBuffer[index + 2] = r;
                 backBuffer[index + 3] = a;
+            }
+            //clear the depthbuffer
+            for (var index = 0; index < depthBuffer.Length; index++)
+            {
+                depthBuffer[index] = float.MaxValue;
             }
         }
 
@@ -58,75 +71,149 @@ namespace SoftEngine
         /*  PutPixel takes a point and a color and writes into our back bufffer. This
             is how we populate our backbuffer with a specific color.
         */
-        public void PutPixel(int x, int y, Color4 color)
+        public void PutPixel(int x, int y, float z, Color4 color)
         {
-            var index = (x + y * bmp.PixelWidth) * 4;
+            var index = (x + y * renderWidth);
+            var index4 = index * 4;
+            //If the point is behind another point then forget it
+            if(depthBuffer[index] < z)
+            {
+                return;
+            }
+            depthBuffer[index] = z;
 
-            backBuffer[index] = (byte)(color.Blue * 255);
-            backBuffer[index + 1] = (byte)(color.Green * 255);
-            backBuffer[index + 2] = (byte)(color.Red * 255);
-            backBuffer[index + 3] = (byte)(color.Alpha * 255);
+            backBuffer[index4] = (byte)(color.Blue * 255);
+            backBuffer[index4 + 1] = (byte)(color.Green * 255);
+            backBuffer[index4 + 2] = (byte)(color.Red * 255);
+            backBuffer[index4 + 3] = (byte)(color.Alpha * 255);
         }
 
         /*  This is changes our points with the final transformation matrix 
         */
-        public Vector2 Project(Vector3 coord, Matrix transMat)
+        public Vector3 Project(Vector3 coord, Matrix transMat)
         {
             
             var point = Vector3.TransformCoordinate(coord, transMat);
            
             var x = point.X * bmp.PixelWidth + bmp.PixelWidth / 2.0f;
             var y = -point.Y * bmp.PixelHeight + bmp.PixelHeight / 2.0f;
-            return (new Vector2(x, y));
+            return (new Vector3(x, y,point.Z));
         }
 
       /*    This takes our point and draws it relitive to our world view. The function "clips" any point that 
             falls out side our projection view since we dont want to waste time drawing points we are not going
             to see. 
       */
-        public void DrawPoint(Vector2 point)
+        public void DrawPoint(Vector3 point, Color4 color)
         {
            
             if (point.X >= 0 && point.Y >= 0 && point.X < bmp.PixelWidth && point.Y < bmp.PixelHeight)
             {
                 
-                PutPixel((int)point.X, (int)point.Y, new Color4(1.0f, 1.0f, 0.0f, 1.0f));
+                PutPixel((int)point.X, (int)point.Y, point.Z, color);
             }
         }
-        public void DrawPoint2(Vector2 point)
+        
+        float Clamp(float value, float min = 0, float max = 1)
         {
+            return Math.Max(min, Math.Min(value, max));
+        }
 
-            if (point.X >= 0 && point.Y >= 0 && point.X < bmp.PixelWidth && point.Y < bmp.PixelHeight)
+        // Interpolating the value between 2 vertices 
+        // min is the starting point, max the ending point
+        // and gradient the % between the 2 points
+        float Interpolate(float min, float max, float gradient)
+        {
+            return min + (max - min) * Clamp(gradient);
+        }
+
+        //Draws the line from two points, papb to pcpd
+        void ScanLine(int y, Vector3 pa, Vector3 pb, Vector3 pc, Vector3 pd, Color4 color)
+        {
+            
+            var gradient1 = pa.Y != pb.Y ? (y - pa.Y) / (pb.Y - pa.Y) : 1;
+            var gradient2 = pc.Y != pd.Y ? (y - pc.Y) / (pd.Y - pc.Y) : 1;
+
+            int sx = (int)Interpolate(pa.X, pb.X, gradient1);
+            int ex = (int)Interpolate(pc.X, pd.X, gradient2);
+
+            float z1 = Interpolate(pa.Z, pb.Z, gradient1);
+            float z2 = Interpolate(pc.Z, pd.Z, gradient2);
+            
+            for (var x = sx; x < ex; x++)
             {
-
-                PutPixel((int)point.X, (int)point.Y, new Color4(1.0f, 0.0f, 0.0f, 1.0f));
+                float gradient = (x - sx) / (float)(ex - sx);
+                var z = Interpolate(z1, z2, gradient);
+                DrawPoint(new Vector3(x, y,z), color);
             }
         }
 
-        /* Using Bresenhams algorithm to draw the lines. 
-        */
-        public void DrawLine(Vector2 point1, Vector2 point2)
+        public void DrawTriangle(Vector3 p1, Vector3 p2, Vector3 p3, Color4 color)
         {
-            var x0 = (int)point1.X;
-            var y0 = (int)point1.Y;
-            var x1 = (int)point2.X;
-            var y1 = (int)point2.Y;
-
-            var dx = Math.Abs(x1 - x0);
-            var dy = Math.Abs(y1 - y0);
-            var sx = (x0 < x1) ? 1 : -1;
-            var sy = (y0 < y1) ? 1 : -1;
-
-            var err = dx - dy;
-
-            while (true)
+            //Sorting the points so our triangles always has p1 as the lowest y and so on
+            if (p1.Y > p2.Y)
             {
-                DrawPoint(new Vector2(x0, y0));
+                var temp = p2;
+                p2 = p1;
+                p1 = temp;
+            }
 
-                if ((x0 == x1) && (y0 == y1)) break;
-                var err2 = 2 * err;
-                if (err2 > -dy) { err -= dy; x0 += sx; }
-                if (err2 < dx) { err += dx; y0 += sy; }    
+            if (p2.Y > p3.Y)
+            {
+                var temp = p2;
+                p2 = p3;
+                p3 = temp;
+            }
+
+            if (p1.Y > p2.Y)
+            {
+                var temp = p2;
+                p2 = p1;
+                p1 = temp;
+            }
+
+            // finding the inverses
+            float invP1P2, invP1P3;
+            if (p2.Y - p1.Y > 0)
+                invP1P2 = (p2.X - p1.X) / (p2.Y - p1.Y);
+            else
+                invP1P2 = 0;
+
+            if (p3.Y - p1.Y > 0)
+                invP1P3 = (p3.X - p1.X) / (p3.Y - p1.Y);
+            else
+                invP1P3 = 0;
+            //If p2 is on the right we use this formula
+            if (invP1P2 > invP1P3)
+            {
+                for (var y = (int)p1.Y; y <= (int)p3.Y; y++)
+                {
+                    //Then we are doing the top to bottom triangle
+                    if (y < p2.Y)
+                    {
+                        ScanLine(y, p1, p3, p1, p2, color);
+                    }
+                    //We are using the bottom up triangle
+                    else
+                    {
+                        ScanLine(y, p1, p3, p2, p3, color);
+                    }
+                }
+            }
+            //P2 is on the left side
+            else
+            {
+                for (var y = (int)p1.Y; y <= (int)p3.Y; y++)
+                {
+                    if (y < p2.Y)
+                    {
+                        ScanLine(y, p1, p2, p1, p3, color);
+                    }
+                    else
+                    {
+                        ScanLine(y, p2, p3, p1, p3, color);
+                    }
+                }
             }
         }
 
@@ -226,21 +313,7 @@ namespace SoftEngine
                 //THE WVP of the matrices. This makes one god matrix that we apply to every vertice
                 // That does all the transformations at once.
                 var transformMatrix = worldMatrix * viewMatrix * projectionMatrix;
-
-                foreach (var vertex in mesh.Vertices)
-                {
-
-                    var point = Project(vertex, transformMatrix);
-                    //Going to color the sides red just for fun
-                    DrawPoint2(point);
-                }
-                //for (int i =0; i < mesh.Vertices.Length -1 ; i++)
-                //{
-                //    //var point1 = Project(mesh.Vertices[i], transformMatrix);
-                //    //var point2 = Project(mesh.Vertices[i + 1], transformMatrix);
-                //    //DrawLine(point1, point2);
-                    
-                //}
+                var faceIndex = 0;
                 foreach(var face in mesh.Faces)
                 {   
                     // Drawing each triangles face. Obviously a triangle is made of three points
@@ -252,10 +325,9 @@ namespace SoftEngine
                     var pixelA = Project(vertexA, transformMatrix);
                     var pixelB = Project(vertexB, transformMatrix);
                     var pixelC = Project(vertexC, transformMatrix);
-
-                    DrawLine(pixelA, pixelB);
-                    DrawLine(pixelB, pixelC);
-                    DrawLine(pixelC, pixelA);
+                    var color = 155.0f + (faceIndex % mesh.Faces.Length) * .75f / mesh.Faces.Length;
+                    DrawTriangle(pixelA, pixelB, pixelC, new Color4(color, color, color, 1));
+                    faceIndex++;
                 }
             }
         }
