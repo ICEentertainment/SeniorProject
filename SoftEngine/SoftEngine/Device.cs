@@ -12,6 +12,7 @@ namespace SoftEngine
         //Creating a backbuffer object
         private byte[] backBuffer;
         private readonly float[] depthBuffer;
+        private object[] lockbuffer;
         private WriteableBitmap bmp;
         private readonly int renderWidth;
         private readonly int renderHeight;
@@ -26,9 +27,14 @@ namespace SoftEngine
             renderHeight = bmp.PixelHeight;
             renderWidth = bmp.PixelWidth;
             //4times our resolution becuae each pixel has 4 properties
-            backBuffer = new byte[bmp.PixelWidth * bmp.PixelHeight * 4];
+            backBuffer = new byte[renderWidth * renderHeight * 4];
             //We only want one property per pixel, the z, so dont have to multiply it
-            depthBuffer = new float[bmp.PixelWidth * bmp.PixelHeight];
+            depthBuffer = new float[renderWidth * renderHeight];
+            lockbuffer = new object[renderWidth * renderHeight];
+            for(var index =0; index < lockbuffer.Length; index++)
+            {
+                lockbuffer[index] = new object();
+            }
         }
 
         /*  The Clear function does exactly what It says. It fills our back buffer with a certain color 
@@ -75,17 +81,21 @@ namespace SoftEngine
         {
             var index = (x + y * renderWidth);
             var index4 = index * 4;
+            
             //If the point is behind another point then forget it
-            if(depthBuffer[index] < z)
+            lock (lockbuffer[index])
             {
-                return;
-            }
-            depthBuffer[index] = z;
+                if (depthBuffer[index] < z)
+                {
+                    return;
+                }
+                depthBuffer[index] = z;
 
-            backBuffer[index4] = (byte)(color.Blue * 255);
-            backBuffer[index4 + 1] = (byte)(color.Green * 255);
-            backBuffer[index4 + 2] = (byte)(color.Red * 255);
-            backBuffer[index4 + 3] = (byte)(color.Alpha * 255);
+                backBuffer[index4] = (byte)(color.Blue * 255);
+                backBuffer[index4 + 1] = (byte)(color.Green * 255);
+                backBuffer[index4 + 2] = (byte)(color.Red * 255);
+                backBuffer[index4 + 3] = (byte)(color.Alpha * 255);
+            }
         }
 
         /*  This is changes our points with the final transformation matrix 
@@ -95,8 +105,8 @@ namespace SoftEngine
             
             var point = Vector3.TransformCoordinate(coord, transMat);
            
-            var x = point.X * bmp.PixelWidth + bmp.PixelWidth / 2.0f;
-            var y = -point.Y * bmp.PixelHeight + bmp.PixelHeight / 2.0f;
+            var x = point.X * renderWidth + renderHeight / 2.0f;
+            var y = -point.Y * renderHeight + renderWidth / 2.0f;
             return (new Vector3(x, y,point.Z));
         }
 
@@ -107,7 +117,7 @@ namespace SoftEngine
         public void DrawPoint(Vector3 point, Color4 color)
         {
            
-            if (point.X >= 0 && point.Y >= 0 && point.X < bmp.PixelWidth && point.Y < bmp.PixelHeight)
+            if (point.X >= 0 && point.Y >= 0 && point.X < renderWidth && point.Y < renderHeight)
             {
                 
                 PutPixel((int)point.X, (int)point.Y, point.Z, color);
@@ -300,7 +310,7 @@ namespace SoftEngine
             // The camera view sets up our view looking at our world matrix and the 
             // projection matrix decides what we can see in the view. 
             var projectionMatrix = Matrix.PerspectiveFovRH(0.78f, 
-                                                           (float)bmp.PixelWidth / bmp.PixelHeight, 
+                                                           (float)renderWidth / renderHeight, 
                                                            0.01f, 1.0f);
 
             foreach (Mesh mesh in meshes) 
@@ -313,22 +323,23 @@ namespace SoftEngine
                 //THE WVP of the matrices. This makes one god matrix that we apply to every vertice
                 // That does all the transformations at once.
                 var transformMatrix = worldMatrix * viewMatrix * projectionMatrix;
-                var faceIndex = 0;
-                foreach(var face in mesh.Faces)
-                {   
+
+                Parallel.For(0, mesh.Faces.Length, faceIndex =>
+                  {
+                      var face = mesh.Faces[faceIndex];
                     // Drawing each triangles face. Obviously a triangle is made of three points
                     // Just grab the three and draw a line to each recursivly
                     var vertexA = mesh.Vertices[face.A];
-                    var vertexB = mesh.Vertices[face.B];
-                    var vertexC = mesh.Vertices[face.C];
+                      var vertexB = mesh.Vertices[face.B];
+                      var vertexC = mesh.Vertices[face.C];
 
-                    var pixelA = Project(vertexA, transformMatrix);
-                    var pixelB = Project(vertexB, transformMatrix);
-                    var pixelC = Project(vertexC, transformMatrix);
-                    var color = 155.0f + (faceIndex % mesh.Faces.Length) * .75f / mesh.Faces.Length;
-                    DrawTriangle(pixelA, pixelB, pixelC, new Color4(color, color, color, 1));
-                    faceIndex++;
-                }
+                      var pixelA = Project(vertexA, transformMatrix);
+                      var pixelB = Project(vertexB, transformMatrix);
+                      var pixelC = Project(vertexC, transformMatrix);
+                      var color = 155.0f + (faceIndex % mesh.Faces.Length) * .75f / mesh.Faces.Length;
+                      DrawTriangle(pixelA, pixelB, pixelC, new Color4(color, color, color, 1));
+                      faceIndex++;
+                  });
             }
         }
     }

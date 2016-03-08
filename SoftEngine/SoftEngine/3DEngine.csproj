@@ -121,6 +121,9 @@
     <Content Include="monkey.babylon">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="FinalTest.babylon">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <None Include="packages.config" />
     <None Include="SoftEngine_TemporaryKey.pfx" />
     <Content Include="Test2.babylon">

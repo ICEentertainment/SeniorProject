@@ -40,16 +40,15 @@ namespace SoftEngine
             frontBuffer.Source = bmp;
 
             device = new Device(bmp);
-            meshes = await device.LoadJSONMesh("Test2.babylon");
-            mera.Position = new Vector3(0.0f, 0.0f, 13.0f);
+            meshes = await device.LoadJSONMesh("FinalTest.babylon");
+            mera.Position = new Vector3(0.0f, 0.0f, 5.0f);
             mera.Target = Vector3.Zero;
 
             // Registering to the XAML rendering loop
             CompositionTarget.Rendering += CompositionTarget_Rendering;
         }
 
-        DateTime prev;
-        TextBlock fps = new TextBlock();
+        
         void CompositionTarget_Rendering(object sender, object e)
         {
 
